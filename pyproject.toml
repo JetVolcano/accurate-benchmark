@@ -1,7 +1,12 @@
 [project]
 name = "accurate-benchmark"
-version = "0.0.0"
-description = "Add your description here"
+version = "0.1.0"
+description = "A python package for accurate benchmarking and speed comparisons"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = []
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]
