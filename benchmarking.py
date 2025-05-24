@@ -3,35 +3,52 @@ from collections.abc import Callable
 from functools import wraps, lru_cache
 from time import perf_counter
 from itertools import repeat
-from typing import Any
+from typing import ParamSpec, TypeVar, Callable
+import sys
 
 
-@lru_cache(maxsize=4096)
-def benchmark(func: Callable) -> Callable:
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+class Benchmark:
     """
-    Decorator to benchmark a function
-    ---
-    when there is a TypeError when decorating your function or testing a function that that isn't in your code please use the base function instead of the decorator like this:
-    benchmark(func)(args)\n
-    :param func: "function to benchmark"\n
-    :type func: "Callable"\n
-    :return: "docstring of parameter func"
+    A class to benchmark a function by running it multiple times and printing the average time taken.
     """
 
-    @wraps(func)
-    def wrapper(*args, **kwargs) -> None:
-        results: deque[float | int] = deque()
-        parameters: tuple[object] = args + tuple(kwargs.items())
-        for _ in repeat(None, 15):
-            try:
-                start = perf_counter()
-                output = func(*args, **kwargs)
-                end = perf_counter()
-                results.append(end - start)
-            except Exception as e:
-                print(f"Exception in {func.__name__}: {e}")
-                break
-        average: float = sum(results) / len(results)
-        print(f"Benchmarking {func.__name__}{parameters} took {average:.12f} seconds")
+    def __init__(self, func: Callable[P, R], precision: int = 15) -> None:
+        """
+        :param func: The function to benchmark.
+        :param precision: The number of times to run the function to get an average time.
+        :type func: Callable[P, R]
+        :type precision: int
+        """
+        self.precision = precision
 
-    return wrapper
+        @lru_cache(maxsize=sys.maxsize)
+        def cbenchmark(
+            precision: int = 15,
+        ) -> Callable[[Callable[P, R]], Callable[P, R]]:
+            def decorator(func: Callable[P, R]) -> Callable[P, R]:
+                @wraps(func)
+                def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+                    results: deque[float] = deque(maxlen=precision)
+                    parameters: tuple[object] = args + tuple(kwargs.items())
+                    for _ in repeat(None, precision):
+                        start_time = perf_counter()
+                        func(*args, **kwargs)
+                        end_time = perf_counter()
+                        results.append(end_time - start_time)
+                    mean: float = sum(results) / len(results)
+                    print(f"{func.__name__}{parameters} took {mean:.12f} seconds")
+
+                    return mean
+
+                return wrapper
+
+            return decorator
+
+        self.__result = cbenchmark(precision)(func)
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
+        return self.__result(*args, **kwargs)
