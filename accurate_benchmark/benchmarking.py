@@ -32,7 +32,7 @@ class Benchmark:
     def benchmark(
         self,
     ) -> Callable[[Callable[P, R]], Callable[P, R]]:
-        def decorator(func: Callable[P, R]) -> Callable[P, R]:
+        def decorator() -> Callable[P, R]:
             @wraps(self.__func)
             @lru_cache(self.__virtual_memory.available // 8)
             def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
