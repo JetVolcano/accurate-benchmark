@@ -1,4 +1,4 @@
-from accurate_benchmark import Benchmark
+from accurate_benchmark.benchmarking import Benchmark
 from collections.abc import Callable
 
 
