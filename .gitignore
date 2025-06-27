@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Linter Cache
+.ruff_cache/

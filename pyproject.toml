@@ -1,12 +1,15 @@
 [project]
 name = "accurate-benchmark"
-version = "0.2.0"
+version = "1.0.0"
 description = "A python package for accurate benchmarking and speed comparisons"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "psutil>=7.0.0",
+    "scipy>=1.16.0",
+]
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
+    "ruff>=0.12.1",
 ]
