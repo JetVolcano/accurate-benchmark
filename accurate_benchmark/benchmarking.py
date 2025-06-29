@@ -1,14 +1,23 @@
 from collections import deque
 from collections.abc import Callable, Iterable
-from functools import wraps
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from time import perf_counter
 from typing import ParamSpec, TypeVar
 from itertools import repeat
 from scipy.stats import trim_mean
+import asyncio
 
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _run_func(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
+    start_time: float = perf_counter()
+    func(*args, **kwargs)
+    end_time: float = perf_counter()
+    return end_time - start_time
 
 
 class Benchmark:
@@ -29,33 +38,35 @@ class Benchmark:
         self.__doc__: str | None = self.__func.__doc__
         self.__name__: str = self.__func.__name__
 
-    def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
-        @wraps(self.__func)
-        def wrapper() -> None:
-            results: deque[float] = deque(maxlen=self.__precision)
-            parameters: tuple[object] = args + tuple(kwargs.items())
-            for _ in repeat(None, self.__precision):
-                start_time = perf_counter()
-                self.__func(*args, **kwargs)
-                end_time = perf_counter()
-                results.append(end_time - start_time)
-            self.__result = trim_mean(results, 0.05)
-            print(
-                f"{self.__func.__name__}{parameters} took {self.__result:.18f} seconds"
+    async def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
+        loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+        results: deque[float] = deque(maxlen=self.__precision)
+        parameters: tuple[object] = args + tuple(kwargs.items())
+        with ProcessPoolExecutor() as executor:
+            tasks: deque = deque(
+                [
+                    loop.run_in_executor(
+                        executor, partial(_run_func, self.__func, *args, **kwargs)
+                    )
+                    for _ in repeat(None, self.__precision)
+                ]
             )
-
-        wrapper()
+            for task in tasks:
+                duration: float = await task
+                results.append(duration)
+        self.__result = trim_mean(results, 0.05)
+        print(f"{self.__func.__name__}{parameters} took {self.__result:.18f} seconds")
         return self.__result
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
         return self.__func(*args, **kwargs)
 
-    def compare(
+    async def compare(
         self,
         func2: Callable[P, R],
         args1: tuple | None = None,
         args2: tuple | None = None,
-        accuracy: int = 15,
+        accuracy: int = ...,
         kwargs1: dict = ...,
         kwargs2: dict = ...,
     ) -> None:
@@ -79,16 +90,17 @@ class Benchmark:
         if kwargs2 == ...:
             kwargs2 = {}
         precision: int = self.__precision
-        self.__precision = accuracy
-        benchmark = Benchmark(func2, accuracy)
+        if accuracy is not ...:
+            self.__precision = accuracy
+        benchmark = Benchmark(func2, self.__precision)
         if not isinstance(args1, Iterable):
-            time1 = self.benchmark(*[args1], **kwargs1)
+            time1 = await self.benchmark(*[args1], **kwargs1)
         else:
-            time1 = self.benchmark(*args1, **kwargs1)
+            time1 = await self.benchmark(*args1, **kwargs1)
         if not isinstance(args2, Iterable):
-            time2 = benchmark.benchmark(*[args2], **kwargs2)
+            time2 = await benchmark.benchmark(*[args2], **kwargs2)
         else:
-            time2 = benchmark.benchmark(*args2, **kwargs2)
+            time2 = await benchmark.benchmark(*args2, **kwargs2)
         self.__precision = precision
         print(
             f"{self.__func.__name__} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {func2.__name__}"
