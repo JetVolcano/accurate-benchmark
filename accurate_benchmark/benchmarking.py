@@ -1,3 +1,4 @@
+from accurate_benchmark.parameters import SingleParam
 from collections import deque
 from collections.abc import Callable, Iterable
 from concurrent.futures import ProcessPoolExecutor
@@ -14,9 +15,14 @@ R = TypeVar("R")
 
 
 def _run_func(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
-    start_time: float = perf_counter()
-    func(*args, **kwargs)
-    end_time: float = perf_counter()
+    if isinstance(*args, SingleParam):
+        start_time: float = perf_counter()
+        func(args[0],  **kwargs)
+        end_time: float = perf_counter()
+    else:
+        start_time: float = perf_counter()
+        func(*args, **kwargs)
+        end_time: float = perf_counter()
     return end_time - start_time
 
 
@@ -39,7 +45,12 @@ class Benchmark:
         self.__name__: str = self.__func.__name__
 
     def __format_function(self, *args: P.args, **kwargs: P.kwargs) -> str:
-        arg_strs: deque[str] = deque([repr(arg) for arg in args])
+        arg_strs: deque[str] = deque()
+        for arg in args:
+            if isinstance(arg, SingleParam):
+                arg_strs.append(repr(arg.value))
+            else:
+                arg_strs.append(repr(arg))
         kwarg_strs: deque[str] = deque([f"{k}={repr(v)}" for k, v in kwargs.items()])
         all_args: str = ", ".join(arg_strs + kwarg_strs)
         return f"{self.__func.__name__}({all_args})"
@@ -47,14 +58,24 @@ class Benchmark:
     def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
         results: deque[float] = deque(maxlen=self.__precision)
         for _ in repeat(None, self.__precision):
-            start_time: float = perf_counter()
-            self.__func(*args, **kwargs)
-            end_time: float = perf_counter()
+            if isinstance(args[0], SingleParam):
+                start_time: float = perf_counter()
+                self.__func(args[0], **kwargs)
+                end_time: float = perf_counter()
+            else:
+                start_time: float = perf_counter()
+                self.__func(*args, **kwargs)
+                end_time: float = perf_counter()
             results.append(end_time - start_time)
         self.__result = trim_mean(results, 0.05)
-        print(
-            f"{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
-        )
+        if not isinstance(args[0], SingleParam):
+            print(
+                f"{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
+            )
+        else:
+            print(
+                f"{self.__format_function(args[0].value, **kwargs)} took {self.__result:.18f} seconds"
+            )
         return self.__result
 
     async def async_benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
@@ -66,6 +87,10 @@ class Benchmark:
                     loop.run_in_executor(
                         executor, partial(_run_func, self.__func, *args, **kwargs)
                     )
+                    if not isinstance(args[0], SingleParam)
+                    else loop.run_in_executor(
+                        _run_func, self.__func, args.value, **kwargs
+                    )
                     for _ in repeat(None, self.__precision)
                 ]
             )
@@ -73,9 +98,14 @@ class Benchmark:
                 duration: float = await task
                 results.append(duration)
         self.__result = trim_mean(results, 0.05)
-        print(
-            f"{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
-        )
+        if not isinstance(*args, SingleParam):
+            print(
+                f"{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
+            )
+        else:
+            print(
+                f"{self.__format_function(args[0].value, **kwargs)} took {self.__result:.18f} seconds"
+            )
         return self.__result
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R:
@@ -113,14 +143,14 @@ class Benchmark:
         if accuracy is not ...:
             self.__precision = accuracy
         benchmark = Benchmark(func2, self.__precision)
-        if not isinstance(args1, Iterable):
-            time1 = self.benchmark(*[args1], **kwargs1)
+        if isinstance(args1, SingleParam):
+            time1: float = self.benchmark(args1.value, **kwargs1)
         else:
-            time1 = self.benchmark(*args1, **kwargs1)
-        if not isinstance(args2, Iterable):
-            time2 = benchmark.benchmark(*[args2], **kwargs2)
+            time1: float = self.benchmark(*args1, **kwargs1)
+        if isinstance(args2, SingleParam):
+            time2: float = benchmark.benchmark(args2.value, **kwargs2)
         else:
-            time2 = benchmark.benchmark(*args2, **kwargs2)
+            time2: float = benchmark.benchmark(*args2, **kwargs2)
         self.__precision = precision
         print(
             f"{self.__func.__name__} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {func2.__name__}"
@@ -158,15 +188,28 @@ class Benchmark:
         if accuracy is not ...:
             self.__precision = accuracy
         benchmark = Benchmark(func2, self.__precision)
-        if not isinstance(args1, Iterable):
-            time1 = await self.async_benchmark(*[args1], **kwargs1)
+        if isinstance(args1, SingleParam):
+            time1: float = await self.async_benchmark(args1.value, **kwargs1)
         else:
-            time1 = await self.async_benchmark(*args1, **kwargs1)
-        if not isinstance(args2, Iterable):
-            time2 = await benchmark.async_benchmark(*[args2], **kwargs2)
+            time1: float = await self.async_benchmark(*args1, **kwargs1)
+        if isinstance(args2, SingleParam):
+            time2: float = await benchmark.async_benchmark(args2.value, **kwargs2)
         else:
-            time2 = await benchmark.async_benchmark(*args2, **kwargs2)
+            time2: float = await benchmark.async_benchmark(*args2, **kwargs2)
         self.__precision = precision
         print(
             f"{self.__func.__name__} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {func2.__name__}"
         )
+
+
+def add(iterable: Iterable[float]) -> float:
+    return sum(iterable)
+
+def sub(a, b) -> float:
+    return a - b
+
+if __name__ == "__main__":
+    bench1: Benchmark = Benchmark(add)
+    bench2: Benchmark = Benchmark(sub)
+    bench1.benchmark(SingleParam([1, 2, 3]))
+    bench2.benchmark(5, 1)

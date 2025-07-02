@@ -1,6 +1,6 @@
 [project]
 name = "accurate-benchmark"
-version = "1.3.0"
+version = "1.4.0"
 description = "A python package for accurate benchmarking and speed comparisons"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -10,5 +10,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.16.1",
     "ruff>=0.12.1",
 ]
