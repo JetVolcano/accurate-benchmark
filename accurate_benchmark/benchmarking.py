@@ -60,7 +60,7 @@ class Benchmark:
         for _ in repeat(None, self.__precision):
             if isinstance(args[0], SingleParam):
                 start_time: float = perf_counter()
-                self.__func(args[0], **kwargs)
+                self.__func(args[0].value, **kwargs)
                 end_time: float = perf_counter()
             else:
                 start_time: float = perf_counter()
@@ -89,7 +89,7 @@ class Benchmark:
                     )
                     if not isinstance(args[0], SingleParam)
                     else loop.run_in_executor(
-                        _run_func, self.__func, args.value, **kwargs
+                        _run_func, self.__func, args[0].value, **kwargs
                     )
                     for _ in repeat(None, self.__precision)
                 ]
