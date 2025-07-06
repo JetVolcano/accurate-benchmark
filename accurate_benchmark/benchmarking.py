@@ -15,7 +15,7 @@ R = TypeVar("R")
 
 
 def _run_func(func: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
-    if isinstance(*args, SingleParam):
+    if isinstance(args, SingleParam):
         start_time: float = perf_counter()
         func(args[0],  **kwargs)
         end_time: float = perf_counter()
@@ -98,7 +98,7 @@ class Benchmark:
                 duration: float = await task
                 results.append(duration)
         self.__result = trim_mean(results, 0.05)
-        if not isinstance(*args, SingleParam):
+        if not isinstance(args, SingleParam):
             print(
                 f"{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
             )
