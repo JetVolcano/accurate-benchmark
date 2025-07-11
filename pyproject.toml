@@ -1,6 +1,6 @@
 [project]
 name = "accurate-benchmark"
-version = "1.4.2"
+version = "1.4.4"
 description = "A python package for accurate benchmarking and speed comparisons"
 readme = "README.md"
 requires-python = ">=3.13"
