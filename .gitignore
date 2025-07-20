@@ -14,4 +14,6 @@ wheels/
 
 # IDE and Editor files
 .vscode/
-.fake
+
+# Notebooks
+testing.ipynb

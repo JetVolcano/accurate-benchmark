@@ -40,6 +40,9 @@ class SingleParam:
     def __iter__(self) -> Iterator:
         return iter(self.__value)
 
+    def __hash__(self) -> int:
+        return hash(self.__value)
+
     def __bool__(self) -> bool:
         """
         Returns the boolean value of the parameter's value.
@@ -55,14 +58,6 @@ class SingleParam:
         :returntype int:
         """
         return self.value.__sizeof__() if hasattr(self.value, "__sizeof__") else 0
-
-    def __hash__(self) -> int:
-        """
-        Returns the hash of the parameter's value.
-
-        :returntype int:
-        """
-        return hash(self.__value)
 
     def __or__(self, other: Any) -> Any:
         """
