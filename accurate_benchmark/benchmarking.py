@@ -14,7 +14,11 @@ R = TypeVar("R")
 def _run_func(func: Callable[P, R], acc, *args: P.args, **kwargs: P.kwargs) -> float:
     results: deque[float] = deque(maxlen=acc)
     for _ in repeat(None, acc):
-        if isinstance(args[0], SingleParam):
+        if args == ():
+            start_time: float = perf_counter()
+            func(**kwargs)
+            end_time: float = perf_counter()
+        elif isinstance(args[0], SingleParam):
             start_time: float = perf_counter()
             func(args[0].value, **kwargs)
             end_time: float = perf_counter()
