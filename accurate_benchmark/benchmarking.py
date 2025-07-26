@@ -1,34 +1,52 @@
 from accurate_benchmark.parameters import SingleParam
+from babel.core import default_locale
+from babel.numbers import format_decimal
 from collections import deque
 from collections.abc import Callable
-from time import perf_counter
-from typing import ParamSpec, TypeVar
+from decimal import Decimal
+from functools import partial, update_wrapper
+from time import perf_counter_ns
+from typing import ParamSpec, TypeVar, Final
 from itertools import repeat
 from scipy.stats import trim_mean
+import logging
+import numpy as np
 
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
 
-def _run_func(func: Callable[P, R], acc, *args: P.args, **kwargs: P.kwargs) -> float:
+def _run_func(
+    func: Callable[P, R],
+    acc: int,
+    logger: logging.Logger,
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> np.ndarray[int]:
     results: deque[float] = deque(maxlen=acc)
+    i: int = 0
+    max_log_len: int = 100
+    if acc <= max_log_len:
+        max_log_len = 1
     for _ in repeat(None, acc):
+        i += 1
+        if (i % (acc / max_log_len) == 0) or max_log_len == 1:
+            logger.info("Run (%s/%s)", i, acc)
         if args == ():
-            start_time: float = perf_counter()
+            start_time: float = perf_counter_ns()
             func(**kwargs)
-            end_time: float = perf_counter()
+            end_time: float = perf_counter_ns()
         elif isinstance(args[0], SingleParam):
-            start_time: float = perf_counter()
+            start_time: float = perf_counter_ns()
             func(args[0].value, **kwargs)
-            end_time: float = perf_counter()
-            results.append(end_time - start_time)
+            end_time: float = perf_counter_ns()
         else:
-            start_time: float = perf_counter()
+            start_time: float = perf_counter_ns()
             func(*args, **kwargs)
-            end_time: float = perf_counter()
-            results.append(end_time - start_time)
-    return trim_mean(results, 0.05)
+            end_time: float = perf_counter_ns()
+        results.append(end_time - start_time)
+    return np.array(results)
 
 
 class Benchmark:
@@ -36,18 +54,140 @@ class Benchmark:
     A class to benchmark a function by running it multiple times and printing the average time taken.
     """
 
-    def __init__(self, func: Callable[P, R], precision: int = 15) -> None:
+    UNITS: Final[tuple[str]] = ("ns", "us", "ms", "s")
+
+    def __init__(
+        self,
+        func: Callable[P, R],
+        precision: int = 15,
+        unit: str = "s",
+        method: str = "trim_mean",
+        log: bool = True,
+        log_type: str = "file",
+        filename: str = "benchmark.log",
+    ) -> None:
         """
         :param func: The function to benchmark.
         :param precision: The number of times to run the function to get an average time.
+        :param unit: The unit of the benchmark.
+        :param method: The method to use to calculate the benchmarkl
         :type func: Callable[P, R]
         :type precision: int
+        :type unit: str
+        :type method: str
         """
+        self.__methods: dict[str, Callable] = {
+            "trim_mean": partial(trim_mean, proportiontocut=0.05),
+            "mean": np.mean,
+            "median": np.median,
+            "min": np.min,
+            "max": np.max,
+            "std": np.std,
+            "var": np.var,
+            "sum": np.sum,
+            "prod": np.prod,
+            "argmin": np.argmin,
+            "argmax": np.argmax,
+        }
+        if method not in self.__methods:
+            raise ValueError(f"Invalid method: {method}")
+        if log_type not in ["file", "console", "both"]:
+            raise ValueError(f"Invalid log type: {log_type}")
+        if not isinstance(func, Callable):
+            raise TypeError("func must be of type Callable")
+        if not isinstance(precision, int):
+            raise TypeError("precision must be of type int")
+        if precision < 1:
+            raise ValueError("precision must be greater than or equal to 1")
+        if unit not in Benchmark.UNITS:
+            raise ValueError(
+                f"Invalid Unit: {unit}, Please use 'ns', 'us', 'ms', or 's'."
+            )
+        update_wrapper(self, func)
+        self.__method: str = method
         self.__func: Callable = func
+        self.__unit: str = unit
         self.__precision: int = precision
-        self.__result: float = ...
-        self.__doc__: str | None = self.__func.__doc__
-        self.__name__: str = self.__func.__name__
+        self.__results: np.ndarray
+        self.__result: Decimal
+        self.__logger: logging.Logger = logging.getLogger(
+            f"benchmark.{self.__name__}.{id(self)}"
+        )
+        self.__log: bool = log
+        self.__log_type: str = log_type
+        self.__filename: str = filename
+        self.__logger.propagate = False
+        self.__logger.setLevel(logging.INFO)
+
+        if log:
+            if self.__logger.hasHandlers():
+                self.__logger.handlers.clear()
+
+            if log_type == "file":
+                file_handler = logging.FileHandler(filename, mode="w")
+                formatter = logging.Formatter(
+                    "%(asctime)s | %(levelname)s | %(message)s",
+                    datefmt="%a, %B %d, %Y at %I:%M:%S %p",
+                )
+                file_handler.setFormatter(formatter)
+                self.__logger.addHandler(file_handler)
+
+    def __repr__(self) -> str:
+        """
+        Returns the representation of the Benchmark instance
+
+        :returntype str:
+        """
+        return f"Benchmark(func={self.__func.__name__}, precision={self.__precision}, unit={self.__unit}, method={self.__method!r})"
+
+    @property
+    def precision(self) -> int:
+        """
+        Returns the precision of the benchmark.
+
+        :returntype int:
+        """
+        return self.__precision
+
+    @precision.setter
+    def precision(self, value: int) -> None:
+        if not isinstance(value, int):
+            raise TypeError("precision must be of type int")
+        if value < 1:
+            raise ValueError("precision must be greater than or equal to 1")
+        self.__precision = value
+
+    @property
+    def unit(self) -> str:
+        """
+        Returns the unit of the benchmark.
+
+        :returntype str:
+        """
+        return self.__unit
+
+    @unit.setter
+    def unit(self, value: str) -> None:
+        if value not in Benchmark.UNITS:
+            raise ValueError(
+                f"Invalid Unit: {value}, Please use 'ns', 'us', 'ms', or 's'."
+            )
+        self.__unit = value
+
+    @property
+    def method(self) -> str:
+        """
+        Returns the method of calculating the benchmark.
+
+        :returntype str:
+        """
+        return self.__method
+
+    @method.setter
+    def method(self, value: str) -> None:
+        if value not in self.__methods:
+            raise ValueError(f"Invalid method: {value}")
+        self.__method = value
 
     @property
     def func(self) -> Callable[P, R]:
@@ -57,6 +197,15 @@ class Benchmark:
         :returntype Callable[P, R]:
         """
         return self.__func
+
+    @property
+    def result(self) -> Decimal | None:
+        """
+        Returns the result of the benchmark if the benchmark hasn't been run yet it will return None.
+
+        :returntype Decimal | None:
+        """
+        return self.__result
 
     def __format_function(self, *args: P.args, **kwargs: P.kwargs) -> str:
         arg_strs: deque[str] = deque()
@@ -68,28 +217,59 @@ class Benchmark:
 
         kwarg_strs: deque[str] = deque([f"{k}={repr(v)}" for k, v in kwargs.items()])
         all_args: str = ", ".join(arg_strs + kwarg_strs)
-        if self.__func.__module__ != "builtins":
+        if self.__func.__module__ not in ["builtins", "__main__"]:
             return f"{self.__func.__module__}.{self.__func.__name__}({all_args})"
         return f"{self.__func.__name__}({all_args})"
 
     def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
-        if len(args) == 0:
-            self.__result = _run_func(self.__func, self.__precision, **kwargs)
-        elif isinstance(args[0], SingleParam):
-            self.__result = _run_func(self.__func, self.__precision, args[0], **kwargs)
-        else:
-            self.__result = _run_func(self.__func, self.__precision, *args, **kwargs)
-        if len(args) == 0:
-            print(
-                f"\n{self.__format_function(**kwargs)} took {self.__result:.18f} seconds"
+        no_args: bool = len(args) == 0
+        if not no_args:
+            single_arg: bool = isinstance(args[0], SingleParam)
+        if no_args:
+            self.__logger.info("Benchmarking %s", self.__format_function(**kwargs))
+            self.__results = _run_func(
+                self.__func, self.__precision, self.__logger, **kwargs
             )
-        elif not isinstance(args[0], SingleParam):
-            print(
-                f"\n{self.__format_function(*args, **kwargs)} took {self.__result:.18f} seconds"
+        elif single_arg:
+            self.__logger.info(
+                "Benchmarking %s", self.__format_function(args[0].value, **kwargs)
             )
-        else:
+            self.__results = _run_func(
+                self.__func, self.__precision, self.__logger, args[0], **kwargs
+            )
+        elif not single_arg:
+            self.__logger.info(
+                "Benchmarking %s", self.__format_function(*args, **kwargs)
+            )
+            self.__results = _run_func(
+                self.__func, self.__precision, self.__logger, *args, **kwargs
+            )
+        current_locale: str = default_locale("LC_NUMERIC") or "en_US"
+        self.__result = int(self.__methods[self.__method](self.__results))
+        unit: Decimal = Decimal(self.__result) / (
+            1000 ** Benchmark.UNITS.index(self.__unit)
+        )
+        formatted: str = format_decimal(
+            unit, locale=current_locale, decimal_quantization=False
+        )
+        units: dict[str, str] = {
+            "ns": "nanoseconds",
+            "us": "microseconds",
+            "ms": "milliseconds",
+            "s": "seconds",
+        }
+        expanded_unit: str = units[self.__unit]
+        if no_args:
             print(
-                f"\n{self.__format_function(args[0].value, **kwargs)} took {self.__result:.18f} seconds"
+                f"\n{self.__format_function(**kwargs)} took {formatted} {expanded_unit}"
+            )
+        elif single_arg:
+            print(
+                f"\n{self.__format_function(args[0].value, **kwargs)} took {formatted} {expanded_unit}"
+            )
+        elif not single_arg:
+            print(
+                f"\n{self.__format_function(*args, **kwargs)} took {formatted} {expanded_unit}"
             )
         return self.__result
 
@@ -127,7 +307,7 @@ class Benchmark:
         precision: int = self.__precision
         if accuracy is not ...:
             self.__precision = accuracy
-        benchmark = Benchmark(func2, self.__precision)
+        benchmark = Benchmark(func2, self.__precision, self.__unit)
         if isinstance(args1, SingleParam):
             time1: float = self.benchmark(args1, **kwargs1)
         else:
