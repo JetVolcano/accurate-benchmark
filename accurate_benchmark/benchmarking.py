@@ -1,17 +1,18 @@
-from accurate_benchmark.parameters import SingleParam
-from babel.core import default_locale
-from babel.numbers import format_decimal
+import logging
 from collections import deque
 from collections.abc import Callable
 from decimal import Decimal
 from functools import partial, update_wrapper
-from time import perf_counter_ns
-from typing import ParamSpec, TypeVar, Final
 from itertools import repeat
-from scipy.stats import trim_mean
-import logging
-import numpy as np
+from time import perf_counter_ns
+from typing import Final, ParamSpec, TypeVar
 
+import numpy as np
+from babel.core import default_locale
+from babel.numbers import format_decimal
+from scipy.stats import trim_mean
+
+from accurate_benchmark.parameters import SingleParam
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -26,7 +27,7 @@ def _run_func(
 ) -> np.ndarray[int]:
     results: deque[float] = deque(maxlen=acc)
     i: int = 0
-    max_log_len: int = 100
+    max_log_len: int = 5
     if acc <= max_log_len:
         max_log_len = 1
     for _ in repeat(None, acc):
@@ -62,9 +63,6 @@ class Benchmark:
         precision: int = 15,
         unit: str = "s",
         method: str = "trim_mean",
-        log: bool = True,
-        log_type: str = "file",
-        filename: str = "benchmark.log",
     ) -> None:
         """
         :param func: The function to benchmark.
@@ -91,8 +89,6 @@ class Benchmark:
         }
         if method not in self.__methods:
             raise ValueError(f"Invalid method: {method}")
-        if log_type not in ["file", "console", "both"]:
-            raise ValueError(f"Invalid log type: {log_type}")
         if not isinstance(func, Callable):
             raise TypeError("func must be of type Callable")
         if not isinstance(precision, int):
@@ -113,24 +109,18 @@ class Benchmark:
         self.__logger: logging.Logger = logging.getLogger(
             f"benchmark.{self.__name__}.{id(self)}"
         )
-        self.__log: bool = log
-        self.__log_type: str = log_type
-        self.__filename: str = filename
         self.__logger.propagate = False
         self.__logger.setLevel(logging.INFO)
+        if self.__logger.hasHandlers():
+            self.__logger.handlers.clear()
+        formatter = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%a, %B %d, %Y at %I:%M:%S %p",
+        )
+        handler: logging.StreamHandler[logging.TextIO] = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        self.__logger.addHandler(handler)
 
-        if log:
-            if self.__logger.hasHandlers():
-                self.__logger.handlers.clear()
-
-            if log_type == "file":
-                file_handler = logging.FileHandler(filename, mode="w")
-                formatter = logging.Formatter(
-                    "%(asctime)s | %(levelname)s | %(message)s",
-                    datefmt="%a, %B %d, %Y at %I:%M:%S %p",
-                )
-                file_handler.setFormatter(formatter)
-                self.__logger.addHandler(file_handler)
 
     def __repr__(self) -> str:
         """
@@ -215,7 +205,7 @@ class Benchmark:
             else:
                 arg_strs.append(repr(arg))
 
-        kwarg_strs: deque[str] = deque([f"{k}={repr(v)}" for k, v in kwargs.items()])
+        kwarg_strs: deque[str] = deque([f"{k}={v!r}" for k, v in kwargs.items()])
         all_args: str = ", ".join(arg_strs + kwarg_strs)
         if self.__func.__module__ not in ["builtins", "__main__"]:
             return f"{self.__func.__module__}.{self.__func.__name__}({all_args})"
@@ -260,15 +250,15 @@ class Benchmark:
         }
         expanded_unit: str = units[self.__unit]
         if no_args:
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(**kwargs)} took {formatted} {expanded_unit}"
             )
         elif single_arg:
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(args[0].value, **kwargs)} took {formatted} {expanded_unit}"
             )
         elif not single_arg:
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(*args, **kwargs)} took {formatted} {expanded_unit}"
             )
         return self.__result
@@ -318,18 +308,18 @@ class Benchmark:
             time2: float = benchmark.benchmark(*args2, **kwargs2)
         self.__precision = precision
         if not isinstance(args1, SingleParam) and not isinstance(args2, SingleParam):
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(*args1, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
             )
         if isinstance(args1, SingleParam) and not isinstance(args2, SingleParam):
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(args1.value, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
             )
         if not isinstance(args1, SingleParam) and isinstance(args2, SingleParam):
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(*args1, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
             )
         if isinstance(args1, SingleParam) and isinstance(args2, SingleParam):
-            print(
+            self.__logger.info(
                 f"\n{self.__format_function(args1.value, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
             )

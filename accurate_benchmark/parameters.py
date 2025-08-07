@@ -80,7 +80,7 @@ class SingleParam:
         :returntype Any:
         """
         return (
-            value | self.value if isinstance(value, SingleParam) else value | self.value
+            value.value | self.value if isinstance(value, SingleParam) else value | self.value
         )
 
     def __and__(self, other: Any) -> Any:
@@ -104,7 +104,7 @@ class SingleParam:
         :returntype Any:
         """
         return (
-            value & self.value if isinstance(value, SingleParam) else value & self.value
+            value.value & self.value if isinstance(value, SingleParam) else value & self.value
         )
 
     def __xor__(self, other: Any) -> Any:
@@ -128,7 +128,7 @@ class SingleParam:
         :returntype Any:
         """
         return (
-            value ^ self.value if isinstance(value, SingleParam) else value ^ self.value
+            value.value ^ self.value if isinstance(value, SingleParam) else value ^ self.value
         )
 
     def __invert__(self) -> Any:
