@@ -24,8 +24,8 @@ def _run_func(
     logger: logging.Logger,
     *args: P.args,
     **kwargs: P.kwargs,
-) -> np.ndarray[int]:
-    results: deque[float] = deque(maxlen=acc)
+) -> np.ndarray:
+    results: deque[int] = deque(maxlen=acc)
     i: int = 0
     max_log_len: int = 5
     if acc <= max_log_len:
@@ -55,7 +55,7 @@ class Benchmark:
     A class to benchmark a function by running it multiple times and printing the average time taken.
     """
 
-    UNITS: Final[tuple[str]] = ("ns", "us", "ms", "s")
+    UNITS: Final[tuple[str, str, str, str]] = ("ns", "us", "ms", "s")
 
     def __init__(
         self,
@@ -80,15 +80,11 @@ class Benchmark:
             "median": np.median,
             "min": np.min,
             "max": np.max,
-            "std": np.std,
-            "var": np.var,
-            "sum": np.sum,
-            "prod": np.prod,
-            "argmin": np.argmin,
-            "argmax": np.argmax,
         }
         if method not in self.__methods:
-            raise ValueError(f"Invalid method: {method}")
+            raise ValueError(
+                f"Invalid method: {method}. Please use one of {self.__methods.keys()}"
+            )
         if not isinstance(func, Callable):
             raise TypeError("func must be of type Callable")
         if not isinstance(precision, int):
@@ -105,7 +101,7 @@ class Benchmark:
         self.__unit: str = unit
         self.__precision: int = precision
         self.__results: np.ndarray
-        self.__result: Decimal
+        self.__result: int
         self.__logger: logging.Logger = logging.getLogger(
             f"benchmark.{self.__name__}.{id(self)}"
         )
@@ -117,10 +113,9 @@ class Benchmark:
             "%(asctime)s | %(levelname)s | %(message)s",
             datefmt="%a, %B %d, %Y at %I:%M:%S %p",
         )
-        handler: logging.StreamHandler[logging.TextIO] = logging.StreamHandler()
+        handler: logging.StreamHandler = logging.StreamHandler()
         handler.setFormatter(formatter)
         self.__logger.addHandler(handler)
-
 
     def __repr__(self) -> str:
         """
@@ -189,11 +184,11 @@ class Benchmark:
         return self.__func
 
     @property
-    def result(self) -> Decimal | None:
+    def result(self) -> int:
         """
         Returns the result of the benchmark if the benchmark hasn't been run yet it will return None.
 
-        :returntype Decimal | None:
+        :returntype int:
         """
         return self.__result
 
@@ -206,12 +201,12 @@ class Benchmark:
                 arg_strs.append(repr(arg))
 
         kwarg_strs: deque[str] = deque([f"{k}={v!r}" for k, v in kwargs.items()])
-        all_args: str = ", ".join(arg_strs + kwarg_strs)
+        all_args: str = ", ".join([*arg_strs, *kwarg_strs])
         if self.__func.__module__ not in ["builtins", "__main__"]:
             return f"{self.__func.__module__}.{self.__func.__name__}({all_args})"
         return f"{self.__func.__name__}({all_args})"
 
-    def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> float:
+    def benchmark(self, *args: P.args, **kwargs: P.kwargs) -> int:
         no_args: bool = len(args) == 0
         if not no_args:
             single_arg: bool = isinstance(args[0], SingleParam)
@@ -236,7 +231,7 @@ class Benchmark:
             )
         current_locale: str = default_locale("LC_NUMERIC") or "en_US"
         self.__result = int(self.__methods[self.__method](self.__results))
-        unit: Decimal = Decimal(self.__result) / (
+        unit: Decimal = Decimal(self.__result) / Decimal(
             1000 ** Benchmark.UNITS.index(self.__unit)
         )
         formatted: str = format_decimal(
@@ -272,8 +267,8 @@ class Benchmark:
         args1: tuple | SingleParam | None = None,
         args2: tuple | SingleParam | None = None,
         accuracy: int = ...,
-        kwargs1: dict = ...,
-        kwargs2: dict = ...,
+        kwargs1: dict = {},
+        kwargs2: dict = {},
     ) -> None:
         """
         Compare the execution time of two functions with the same parameters.
@@ -297,9 +292,9 @@ class Benchmark:
         precision: int = self.__precision
         if accuracy is not ...:
             self.__precision = accuracy
-        benchmark = Benchmark(func2, self.__precision, self.__unit)
+        benchmark = Benchmark(func2, self.__precision, self.__unit, self.__method)
         if isinstance(args1, SingleParam):
-            time1: float = self.benchmark(args1, **kwargs1)
+            time1: float = self.benchmark(args1.value, **kwargs1)
         else:
             time1: float = self.benchmark(*args1, **kwargs1)
         if isinstance(args2, SingleParam):

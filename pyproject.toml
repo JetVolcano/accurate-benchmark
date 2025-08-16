@@ -1,6 +1,6 @@
 [project]
 name = "accurate-benchmark"
-version = "2.1.0"
+version = "2.2.0"
 authors = [{ name = "JetVolcano" }]
 maintainers = [{ name = "JetVolcano" }]
 description = "A python package for accurate benchmarking and speed comparisons"
