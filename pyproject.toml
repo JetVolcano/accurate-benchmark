@@ -1,6 +1,6 @@
 [project]
 name = "accurate-benchmark"
-version = "2.2.0"
+version = "2.3.0"
 authors = [{ name = "JetVolcano" }]
 maintainers = [{ name = "JetVolcano" }]
 description = "A python package for accurate benchmarking and speed comparisons"
@@ -10,7 +10,10 @@ license = { file = "LICENSE.md" }
 dependencies = ["numpy>=2.3.2", "scipy>=1.16.0"]
 
 [dependency-groups]
-dev = ["jupyter>=1.1.1", "ruff>=0.12.1"]
+dev = [
+    "jupyter>=1.1.1",
+    "ruff>=0.14.5",
+]
 
 [project.urls]
 Source = "https://github.com/JetVolcano/accurate-benchmar"
