@@ -65,14 +65,29 @@ class Benchmark:
         method: str = "trim_mean",
     ) -> None:
         """
-        :param func: The function to benchmark.
-        :param precision: The number of times to run the function to get an average time.
-        :param unit: The unit of the benchmark.
-        :param method: The method to use to calculate the benchmarkl
-        :type func: Callable[P, R]
-        :type precision: int
-        :type unit: str
-        :type method: str
+        Parameters
+        ----------
+        func : Callable[P, R]
+            The  function to benchmark.
+        precision : int, optional, default=15
+            The number of times to run the function to get an average time.
+        unit : str, optional, default="s"
+            The unit of time that wil be outputed.
+        method : str, optional, default="trim_mean"
+            The method that will be used to get the time. (default is the most accurate)
+
+        Raises
+        ------
+        ValueError
+            Method is not supported, (supported methods: trim_mean, mean, median, min, max)
+        TypeError
+            func must be of type Callable.
+        TypeError
+            precision must be of type int.
+        ValueError
+            precision must be greater than or equal to 1.
+        ValueError
+            Unit does not exist, (supported units: ns, us, ms, s)
         """
         self.__methods: dict[str, Callable] = {
             "trim_mean": partial(trim_mean, proportiontocut=0.05),
@@ -83,17 +98,17 @@ class Benchmark:
         }
         if method not in self.__methods:
             raise ValueError(
-                f"Invalid method: {method}. Please use one of {self.__methods.keys()}"
+                f"Method is not supported: {method}, (supported methods: {', '.join(self.__methods.keys())})"
             )
         if not isinstance(func, Callable):
-            raise TypeError("func must be of type Callable")
+            raise TypeError("func must be of type Callable.")
         if not isinstance(precision, int):
-            raise TypeError("precision must be of type int")
+            raise TypeError("precision must be of type int.")
         if precision < 1:
-            raise ValueError("precision must be greater than or equal to 1")
+            raise ValueError("precision must be greater than or equal to 1.")
         if unit not in Benchmark.UNITS:
             raise ValueError(
-                f"Invalid Unit: {unit}, Please use 'ns', 'us', 'ms', or 's'."
+                f"Unit does not exist: {unit}, (supported units: {', '.join(Benchmark.UNITS)})"
             )
         update_wrapper(self, func)
         self.__method: str = method
@@ -118,20 +133,10 @@ class Benchmark:
         self.__logger.addHandler(handler)
 
     def __repr__(self) -> str:
-        """
-        Returns the representation of the Benchmark instance
-
-        :returntype str:
-        """
-        return f"Benchmark(func={self.__func.__name__}, precision={self.__precision}, unit={self.__unit}, method={self.__method!r})"
+        return f"Benchmark(func={self.__func.__name__}, precision={self.__precision}, unit={self.__unit!r}, method={self.__method!r})"
 
     @property
     def precision(self) -> int:
-        """
-        Returns the precision of the benchmark.
-
-        :returntype int:
-        """
         return self.__precision
 
     @precision.setter
@@ -144,11 +149,6 @@ class Benchmark:
 
     @property
     def unit(self) -> str:
-        """
-        Returns the unit of the benchmark.
-
-        :returntype str:
-        """
         return self.__unit
 
     @unit.setter
@@ -161,11 +161,6 @@ class Benchmark:
 
     @property
     def method(self) -> str:
-        """
-        Returns the method of calculating the benchmark.
-
-        :returntype str:
-        """
         return self.__method
 
     @method.setter
@@ -176,20 +171,10 @@ class Benchmark:
 
     @property
     def func(self) -> Callable[P, R]:
-        """
-        Returns the function being benchmarked.
-
-        :returntype Callable[P, R]:
-        """
         return self.__func
 
     @property
-    def result(self) -> int:
-        """
-        Returns the result of the benchmark if the benchmark hasn't been run yet it will return None.
-
-        :returntype int:
-        """
+    def result(self) -> int | None:
         return self.__result
 
     def __format_function(self, *args: P.args, **kwargs: P.kwargs) -> str:
@@ -244,6 +229,8 @@ class Benchmark:
             "s": "seconds",
         }
         expanded_unit: str = units[self.__unit]
+        if unit == 1:
+            expanded_unit = expanded_unit[:-1]
         if no_args:
             self.__logger.info(
                 f"\n{self.__format_function(**kwargs)} took {formatted} {expanded_unit}"
@@ -266,31 +253,37 @@ class Benchmark:
         func2: Callable[P, R],
         args1: tuple | SingleParam | None = None,
         args2: tuple | SingleParam | None = None,
-        accuracy: int = ...,
-        kwargs1: dict = {},
-        kwargs2: dict = {},
+        kwargs1: dict | None = None,
+        kwargs2: dict | None = None,
+        accuracy: int | None = None,
     ) -> None:
-        """
-        Compare the execution time of two functions with the same parameters.
+        """Compare the exectution time of two functions.
 
-        :param func2: The second function to benchmark.
-        :param args1: The posistional arguments for self
-        :param args2: The posistional arguments for func2
-        :param kwargs1: The keyword arguments for self
-        :param kwargs2: The keyword arguments for func2
-        :param accuracy: How many times to run each function, a higher is more accurate than a smaller number but it takes longer
-        :returntype None:
+        Parameters
+        ----------
+        func2 : Callable[P, R]
+            The second function to benchmark.
+        args1 : tuple | SingleParam | None, optional, default=None
+            The posistional arguments for the first function.
+        args2 : tuple | SingleParam | None, optional, default=None
+            The posistional arguments for the second function.
+        kwargs1: dict | None, optional, default=None
+            The keyword arguments for the first function
+        kwargs2: dict | None, optional, default=None
+            The keyword arguments for the second function
+        accuracy : int | None, optional, default=None
+            How many times to run each function.
         """
         if args1 is None:
             args1 = ()
         if args2 is None:
             args2 = ()
-        if kwargs1 == ...:
+        if kwargs1 is None:
             kwargs1 = {}
-        if kwargs2 == ...:
+        if kwargs2 is None:
             kwargs2 = {}
         precision: int = self.__precision
-        if accuracy is not ...:
+        if accuracy is not None:
             self.__precision = accuracy
         benchmark = Benchmark(func2, self.__precision, self.__unit, self.__method)
         if isinstance(args1, SingleParam):
@@ -304,17 +297,17 @@ class Benchmark:
         self.__precision = precision
         if not isinstance(args1, SingleParam) and not isinstance(args2, SingleParam):
             self.__logger.info(
-                f"\n{self.__format_function(*args1, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
+                f"\n{self.__format_function(*args1, **kwargs1)} is {(time2 / (time1 + 1) if time1 < 1 else (time2 / (time1 + 1) if time1 < 1 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
             )
         if isinstance(args1, SingleParam) and not isinstance(args2, SingleParam):
             self.__logger.info(
-                f"\n{self.__format_function(args1.value, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
+                f"\n{self.__format_function(args1.value, **kwargs1)} is {(time2 / (time1 + 1) if time1 < 1 else (time2 / (time1 + 1) if time1 < 1 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(*args2, **kwargs2)}\n"
             )
         if not isinstance(args1, SingleParam) and isinstance(args2, SingleParam):
             self.__logger.info(
-                f"\n{self.__format_function(*args1, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
+                f"\n{self.__format_function(*args1, **kwargs1)} is {(time2 / (time1 + 1) if time1 < 1 else (time2 / (time1 + 1) if time1 < 1 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
             )
         if isinstance(args1, SingleParam) and isinstance(args2, SingleParam):
             self.__logger.info(
-                f"\n{self.__format_function(args1.value, **kwargs1)} is {time2 / time1 if time1 < time2 else time1 / time2:4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
+                f"\n{self.__format_function(args1.value, **kwargs1)} is {(time2 / (time1 + 1) if time1 < 1 else (time2 / (time1 + 1) if time1 < 1 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f} times {'faster' if time1 < time2 else 'slower' if time2 < time1 else 'the same'} than {benchmark.__format_function(args2.value, **kwargs2)}\n"
             )
