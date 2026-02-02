@@ -17,12 +17,12 @@ class SingleParam:
                 f"Expected value of type {type(self.__value).__name__}, got {type(value).__name__}"
             )
         self.__value = value
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.__value!r})"
-
+    
     def __iter__(self) -> Iterator:
-        return iter(self.__value)
+        yield self.__value
+    
+    def __repr__(self) -> str:
+        return f"{self.__value!r}"
 
     def __hash__(self) -> int:
         return hash(self.__value)
