@@ -1,13 +1,13 @@
 [project]
 name = "accurate-benchmark"
-version = "3.0.1"
+version = "3.0.2"
 authors = [{ name = "JetVolcano" }]
 maintainers = [{ name = "JetVolcano" }]
 description = "A python package for accurate benchmarking and speed comparisons"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { file = "LICENSE.md" }
-dependencies = ["numpy>=2.3.2", "rich[jupyter]>=14.3.1", "scipy>=1.16.0"]
+dependencies = ["numpy>=2.4.2", "rich[jupyter]>=14.3.1", "scipy>=1.17.0"]
 
 [dependency-groups]
 dev = ["jupyter>=1.1.1", "ruff>=0.14.5"]
