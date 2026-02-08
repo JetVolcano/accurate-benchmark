@@ -12,10 +12,20 @@ from babel.numbers import format_decimal
 from rich.console import Console
 from scipy.stats import trim_mean
 
+from accurate_benchmark._console import _create_console
 from accurate_benchmark.parameters import SingleParam
 
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _format_function(func: Callable[P, R], *args: Any, **kwargs: Any) -> str:
+    arg_strs: deque[str] = deque([repr(arg) for arg in args])
+    kwarg_strs: deque[str] = deque([f"{k}={v!r}" for k, v in kwargs.items()])
+    all_args: str = ", ".join([*arg_strs, *kwarg_strs])
+    if func.__module__ not in ["builtins", "__main__"]:
+        return f"{func.__module__}.{func.__name__}({all_args})"
+    return f"{func.__name__}({all_args})"
 
 
 def _run_func(
@@ -142,7 +152,7 @@ class Benchmark(Generic[P, R]):
         self.__precision: int = precision
         self.__results: np.ndarray
         self.__result: int | float
-        self.__console: Console = Console()
+        self.__console: Console = _create_console()
 
     def __repr__(self) -> str:
         return f"Benchmark(func={self.__func.__name__}, precision={self.__precision}, unit={self.__unit!r}, method={self.__method!r})"
@@ -189,17 +199,9 @@ class Benchmark(Generic[P, R]):
     def result(self) -> int | float | None:
         return self.__result
 
-    def __format_function(self, *args: Any, **kwargs: Any) -> str:
-        arg_strs: deque[str] = deque([repr(arg) for arg in args])
-        kwarg_strs: deque[str] = deque([f"{k}={v!r}" for k, v in kwargs.items()])
-        all_args: str = ", ".join([*arg_strs, *kwarg_strs])
-        if self.__func.__module__ not in ["builtins", "__main__"]:
-            return f"{self.__func.__module__}.{self.__func.__name__}({all_args})"
-        return f"{self.__func.__name__}({all_args})"
-
     def benchmark(self, *args: Any, **kwargs: Any) -> int | float:
         self.__console.rule(
-            f"Benchmarking {self.__format_function(*args, **kwargs)}",
+            f"Benchmarking {_format_function(self.__func, *args, **kwargs)}",
         )
         self.__results = _run_func(
             self.__func, self.__precision, self.__console, *args, **kwargs
@@ -220,7 +222,7 @@ class Benchmark(Generic[P, R]):
         if unit == 1:
             expanded_unit = expanded_unit[:-1]
         self.__console.log(
-            f"{self.__format_function(*args, **kwargs)} took {formatted} {expanded_unit}"
+            f"{_format_function(self.__func, *args, **kwargs)} took {formatted} {expanded_unit}"
         )
         return self.__result
 
@@ -270,8 +272,8 @@ class Benchmark(Generic[P, R]):
         time1: float = self.benchmark(*args1, **kwargs1)
         time2: float = benchmark.benchmark(*args2, **kwargs2)
         self.__precision = precision
-        formatted_self: str = self.__format_function(*args1, **kwargs1)
-        formatted_other: str = benchmark.__format_function(*args2, **kwargs2)
+        formatted_self: str = _format_function(self.__func, *args1, **kwargs1)
+        formatted_other: str = _format_function(func2, *args2, **kwargs2)
         times_slower_faster: str = f"{(time2 / (time1 + 1) if time1 < 1 else (time2 / time1 if time1 < time2 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f}"
         self.__console.rule("Results")
         self.__console.log(
@@ -343,7 +345,7 @@ class AsyncBenchmark(Generic[P, R]):
         self.__precision: int = precision
         self.__results: np.ndarray
         self.__result: int | float
-        self.__console: Console = Console()
+        self.__console: Console = _create_console()
 
     def __repr__(self) -> str:
         return f"AsyncBenchmark(func={self.__func.__name__}, precision={self.__precision}, unit={self.__unit!r}, method={self.__method!r})"
@@ -390,17 +392,9 @@ class AsyncBenchmark(Generic[P, R]):
     def result(self) -> int | float | None:
         return self.__result
 
-    def __format_function(self, *args: Any, **kwargs: Any) -> str:
-        arg_strs: deque[str] = deque([repr(arg) for arg in args])
-        kwarg_strs: deque[str] = deque([f"{k}={v!r}" for k, v in kwargs.items()])
-        all_args: str = ", ".join([*arg_strs, *kwarg_strs])
-        if self.__func.__module__ not in ["builtins", "__main__"]:
-            return f"{self.__func.__module__}.{self.__func.__name__}({all_args})"
-        return f"{self.__func.__name__}({all_args})"
-
     async def benchmark(self, *args: Any, **kwargs: Any) -> int | float:
         self.__console.rule(
-            f"Benchmarking {self.__format_function(*args, **kwargs)}",
+            f"Benchmarking {_format_function(self.__func, *args, **kwargs)}",
         )
         self.__results = await _async_run_func(
             self.__func, self.__precision, self.__console, *args, **kwargs
@@ -421,7 +415,7 @@ class AsyncBenchmark(Generic[P, R]):
         if unit == 1:
             expanded_unit = expanded_unit[:-1]
         self.__console.log(
-            f"{self.__format_function(*args, **kwargs)} took {formatted} {expanded_unit}"
+            f"{_format_function(self.__func, *args, **kwargs)} took {formatted} {expanded_unit}"
         )
         return self.__result
 
@@ -471,10 +465,64 @@ class AsyncBenchmark(Generic[P, R]):
         time1: float = await self.benchmark(*args1, **kwargs1)
         time2: float = await benchmark.benchmark(*args2, **kwargs2)
         self.__precision = precision
-        formatted_self: str = self.__format_function(*args1, **kwargs1)
-        formatted_other: str = benchmark.__format_function(*args2, **kwargs2)
+        formatted_self: str = _format_function(self.__func, *args1, **kwargs1)
+        formatted_other: str = _format_function(func2, *args2, **kwargs2)
         times_slower_faster: str = f"{(time2 / (time1 + 1) if time1 < 1 else (time2 / time1 if time1 < time2 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f}"
         self.__console.rule("Results")
         self.__console.log(
             f"{formatted_self} is {f'{times_slower_faster} times faster than {formatted_other}' if time1 < time2 else f'{times_slower_faster} times slower than {formatted_other}' if time2 < time1 else f'the same as {formatted_other}'}"
         )
+
+
+async def compare(
+    bench1: Benchmark | AsyncBenchmark,
+    bench2: Benchmark | AsyncBenchmark,
+    args1: tuple | SingleParam | None = None,
+    args2: tuple | SingleParam | None = None,
+    kwargs1: dict | None = None,
+    kwargs2: dict | None = None,
+) -> None:
+    """Compare the exectution time of two benchmarks.
+    Use this if you want to compare an async function with a synchronous function
+
+    Parameters
+    ----------
+    bench1 : Benchmark | AsyncBenchmark
+        The first benchmark to compare.
+    bench2 : Benchmark | AsyncBenchmark
+        The second benchmark to compare.
+    args1 : tuple | SingleParam | None, optional, default=None
+        The posistional arguments for the first function.
+    args2 : tuple | SingleParam | None, optional, default=None
+        The posistional arguments for the second function.
+    kwargs1: dict | None, optional, default=None
+        The keyword arguments for the first function
+    kwargs2: dict | None, optional, default=None
+        The keyword arguments for the second function
+    """
+    if args1 is None:
+        args1 = ()
+    if args2 is None:
+        args2 = ()
+    if kwargs1 is None:
+        kwargs1 = {}
+    if kwargs2 is None:
+        kwargs2 = {}
+    time1: float
+    time2: float
+    console: Console = _create_console()
+    if isinstance(bench1, Benchmark):
+        time1 = bench1.benchmark(*args1, **kwargs1)
+    elif isinstance(bench1, AsyncBenchmark):
+        time1 = await bench1.benchmark(*args1, **kwargs1)
+    if isinstance(bench2, Benchmark):
+        time2 = bench2.benchmark(*args2, **kwargs2)
+    elif isinstance(bench2, AsyncBenchmark):
+        time2 = await bench2.benchmark(*args2, **kwargs2)
+    formatted_self: str = _format_function(bench1.func, *args1, **kwargs1)
+    formatted_other: str = _format_function(bench2.func, *args2, **kwargs2)
+    times_slower_faster: str = f"{(time2 / (time1 + 1) if time1 < 1 else (time2 / time1 if time1 < time2 else time2)) if time1 < time2 else (time1 / (time2 + 1) if time2 < 1 else time1 / time2):4f}"
+    console.rule("Results")
+    console.log(
+        f"{formatted_self} is {f'{times_slower_faster} times faster than {formatted_other}' if time1 < time2 else f'{times_slower_faster} times slower than {formatted_other}' if time2 < time1 else f'the same as {formatted_other}'}"
+    )
