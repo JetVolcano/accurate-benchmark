@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["jupyter>=1.1.1", "ruff>=0.15.1"]
+dev = ["jupyter>=1.1.1", "ruff>=0.15.2"]
 
 [tool.ruff]
 respect-gitignore = false
