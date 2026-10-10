@@ -1,9 +1,10 @@
 from collections import deque
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
-from functools import update_wrapper, wraps
+from functools import partial, update_wrapper, wraps
 from itertools import repeat
 from time import perf_counter_ns
+from types import FunctionType
 from typing import Any, Generic, Literal, ParamSpec, TypeVar, cast
 
 import matplotlib.pyplot as plt
@@ -26,13 +27,15 @@ R = TypeVar("R")
 
 GlobalConsole: _BenchmarkConsole = Constants.GLOBAL_CONSOLE
 
+_get_name = partial(cast, FunctionType)
+
 
 def _format_function(
     func: Callable[P, R], parameters: bool = True, *args: Any, **kwargs: Any
 ) -> Text:
     em: list[str] = ["builtins", "__main__"]
     name: Text = Text(
-        f"{f'{func.__module__}.' if func.__module__ not in em else ''}{func.__name__}",
+        f"{f'{func.__module__}.' if func.__module__ not in em else ''}{_get_name(func)}",
         style="repr.call",
     )
     if not parameters:
@@ -215,7 +218,7 @@ class Benchmark(Generic[P, R]):
             [
                 "Benchmark",
                 "(",
-                f"func={self.__func.__name__}, ",
+                f"func={_get_name(self.__func)}, ",
                 f"precision={self.__precision}, ",
                 f"unit={self.__unit!r}, ",
                 f"method={self.__method!r}",
@@ -526,7 +529,7 @@ class AsyncBenchmark(Generic[P, R]):
             [
                 "AsyncBenchmark",
                 "(",
-                f"func={self.__func.__name__}, ",
+                f"func={_get_name(self.__func)}, ",
                 f"precision={self.__precision}, ",
                 f"unit={self.__unit!r}, ",
                 f"method={self.__method!r}",
